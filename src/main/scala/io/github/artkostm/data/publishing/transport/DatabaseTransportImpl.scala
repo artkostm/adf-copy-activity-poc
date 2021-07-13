@@ -1,6 +1,6 @@
 package io.github.artkostm.data.publishing.transport
 
-import com.petrofac.common.DataLakePathUtils
+import io.github.artkostm.common.DataLakePathUtils
 import io.github.artkostm.data.publishing.config.{Full, WithFallback}
 import io.github.artkostm.data.publishing.config.DatabaseTransportConfig
 import io.github.artkostm.data.publishing.db.Repository
