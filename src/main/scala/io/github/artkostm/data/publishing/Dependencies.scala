@@ -1,7 +1,7 @@
 package io.github.artkostm.data.publishing
 
-import com.petrofac.azure.loganalitycs.LoggingUtils
-import com.petrofac.common.utils.EnvironmentUtils
+import io.github.artkostm.azure.loganalitycs.LoggingUtils
+import io.github.artkostm.common.utils.EnvironmentUtils
 import io.github.artkostm.data.publishing.config.{DatabaseConfig, DatabaseTransportConfig, FsConfigurationProp}
 import io.github.artkostm.data.landing.rest.{config => C}
 import io.github.artkostm.data.landing.rest.logger
