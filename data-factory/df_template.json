@@ -1,0 +1,304 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "FactoryName": {
+      "type": "string",
+      "metadata": "Data Factory container name."
+    },
+    "FactoryLocation": {
+      "type": "string",
+      "allowedValues": [
+        "North Europe"
+      ],
+      "defaultValue": "North Europe",
+      "metadata": {
+        "description": "Location of the data factory."
+      }
+    },
+    "ApplicationName": {
+      "type": "string",
+      "defaultValue": "DbPublisher",
+      "metadata": {
+        "description": "Application name, also will be used as prefix for all required resources."
+      }
+    },
+    "ApplicationDfDir": {
+      "type": "string",
+      "defaultValue": "Apps/DbPublisher",
+      "metadata": {
+        "description": "The root directory name for all application pipelines in Data Factory."
+      }
+    },
+    "KeyVaultUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Base url to Azure KeyVault to use."
+      }
+    },
+    "DataLakeStorageUrl": {
+      "type": "string",
+      "metadata": "ADLS storage URL, in use for both data and code."
+    },
+    "StorageAccountName": {
+      "type": "securestring",
+      "metadata": "Storage account name."
+    },
+    "StorageConnectionString": {
+      "type": "string",
+      "metadata": "Blob storage connection string."
+    },
+    "BatchAccount": {
+      "type": "object",
+      "metadata": {
+        "description": "The batch LS configurations."
+      }
+    },
+    "DataLakeStorageAccountKey": {
+      "type": "securestring",
+      "metadata": "Storage account key."
+    },
+    "MonitoringDbJdbcConnectionStringSecure": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The secure connection string to the meta db."
+      }
+    }
+  },
+  "variables": {
+    "FactoryId": "[concat('Microsoft.DataFactory/factories/', parameters('FactoryName'))]",
+    "KeyVaultLSName": "[concat(parameters('ApplicationName'), 'KeyVault')]",
+    "DataLakeStorageLSName": "[concat(parameters('ApplicationName'), 'DataLakeStorage')]",
+    "BlobStorageLSName": "[concat(parameters('ApplicationName'), 'BlobStorage')]",
+    "BatchServiceLSName": "[concat(parameters('ApplicationName'), 'BatchService')]",
+    "appRunnerPP": "[concat(parameters('ApplicationName'), 'Pipeline')]"
+  },
+  "resources": [
+    {
+      "name": "[parameters('FactoryName')]",
+      "apiVersion": "2018-06-01",
+      "type": "Microsoft.DataFactory/factories",
+      "location": "[parameters('FactoryLocation')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "resources": []
+    },
+    {
+      "name": "[concat(parameters('FactoryName'), '/', variables('KeyVaultLSName'))]",
+      "type": "Microsoft.DataFactory/factories/linkedServices",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "annotations": [],
+        "type": "AzureKeyVault",
+        "typeProperties": {
+          "baseUrl": "[parameters('KeyVaultUrl')]"
+        }
+      },
+      "dependsOn": [
+        "[variables('FactoryId')]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('FactoryName'), '/', variables('DataLakeStorageLSName'))]",
+      "type": "Microsoft.DataFactory/factories/linkedServices",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "type": "AzureBlobFS",
+        "typeProperties": {
+          "url": "[parameters('DataLakeStorageUrl')]",
+          "accountKey": {
+            "type": "SecureString",
+            "value": "[parameters('DatalakeStorageAccountKey')]"
+          }
+        },
+        "annotations": []
+      }
+    },
+    {
+      "name": "[concat(parameters('FactoryName'), '/', variables('BlobStorageLSName'))]",
+      "type": "Microsoft.DataFactory/factories/linkedServices",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "annotations": [],
+        "type": "AzureBlobStorage",
+        "typeProperties": {
+          "connectionString": {
+            "type": "AzureKeyVaultSecret",
+            "store": {
+              "referenceName": "[variables('KeyVaultLSName')]",
+              "type": "LinkedServiceReference"
+            },
+            "secretName": "[parameters('StorageConnectionString')]"
+          }
+        }
+      },
+      "dependsOn": [
+        "[variables('factoryId')]",
+        "[concat(variables('factoryId'), '/linkedServices/', variables('KeyVaultLSName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('FactoryName'), '/', variables('BatchServiceLSName'))]",
+      "type": "Microsoft.DataFactory/factories/linkedServices",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "annotations": [],
+        "type": "AzureBatch",
+        "typeProperties": {
+          "accountName": "[parameters('BatchAccount').BatchAccountName]",
+          "batchUri": "[parameters('BatchAccount').BatchUrl]",
+          "poolName": "[parameters('BatchAccount').BatchPoolName]",
+          "accessKey": {
+            "type": "AzureKeyVaultSecret",
+            "store": {
+              "referenceName": "[variables('KeyVaultLSName')]",
+              "type": "LinkedServiceReference"
+            },
+            "secretName": "[parameters('BatchAccount').BatchAccountKey.reference.secretName]"
+          },
+          "linkedServiceName": {
+            "referenceName": "[variables('BlobStorageLSName')]",
+            "type": "LinkedServiceReference"
+          }
+        }
+      },
+      "dependsOn": [
+        "[variables('factoryId')]",
+        "[concat(variables('factoryId'), '/linkedServices/', variables('KeyVaultLSName'))]",
+        "[concat(variables('factoryId'), '/linkedServices/', variables('BlobStorageLSName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('FactoryName'), '/', variables('appRunnerPP'))]",
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "activities": [
+          {
+            "name": "If TurnedOn",
+            "type": "IfCondition",
+            "dependsOn": [],
+            "userProperties": [],
+            "typeProperties": {
+              "expression": {
+                "value": "@not(pipeline().parameters.turned_off)",
+                "type": "Expression"
+              },
+              "ifTrueActivities": [
+                {
+                  "name": "DB Data Copy",
+                  "type": "Custom",
+                  "dependsOn": [],
+                  "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                  },
+                  "userProperties": [],
+                  "typeProperties": {
+                    "command": {
+                      "value": "@concat(\n\t'run_java.sh -Xms1G -Xmx2G -cp adf-copy-activity-poc-full.jar:common-full.jar',\n\t' -Doracle.jdbc.timezoneAsRegion=false -Ddb.connection-string=db-connection-string',\n\t' -Ddb.batch-size=', string(pipeline().parameters.batch_size),\n\t' -Dfs.fs-secrets.storage-account-name=storage-account-name',\n\t' -Dfs.fs-secrets.storage-account-key=storage-account-key',\n\t' -Ddirectory=', pipeline().parameters.source_directory,\n\t' -Drejected-directory=', pipeline().parameters.rejected_directory,\n\t' -Dfile-glob=', pipeline().parameters.file_glob, \n\t' -Ddestination-table-name=', pipeline().parameters.destination_table_name, \n\t' -Dmode.type=', pipeline().parameters.processing_mode,\n\t' -Ddata-source=', pipeline().parameters.data_source,\n\t' -Detl=', pipeline().parameters.etl,\n\t' -Dmonitoring-connection-key=monitoring-db-connection-string',\n\tif(or(equals(pipeline().parameters.pre_copy_script, null), empty(trim(pipeline().parameters.pre_copy_script))), '', concat(' -Dpre-copy-script=\"''', pipeline().parameters.pre_copy_script, '''\"')),\n\t' io.github.artkostm.data.publishing.TransportRunner',\n\t' -logApp ', pipeline().parameters.app_name,' -logCorId ', pipeline().parameters.corr_id\n)",
+                      "type": "Expression"
+                    },
+                    "resourceLinkedService": {
+                      "referenceName": "[variables('BlobStorageLSName')]",
+                      "type": "LinkedServiceReference"
+                    },
+                    "folderPath": "app-configs/db-publisher",
+                    "extendedProperties": {
+                      "monitoring-db-connection-string": {
+                        "type": "securestring",
+                        "value": "[parameters('MonitoringDbJdbcConnectionStringSecure')]"
+                      },
+                      "storage-account-name": {
+                        "type": "securestring",
+                        "value": "[parameters('StorageAccountName')]"
+                      },
+                      "storage-account-key": {
+                        "type": "securestring",
+                        "value": "[parameters('DataLakeStorageAccountKey')]"
+                      },
+                      "db-connection-string": "@pipeline().parameters.db_connection_string"
+                    },
+                    "referenceObjects": {
+                      "linkedServices": [
+                        {
+                          "referenceName": "[variables('DataLakeStorageLSName')]",
+                          "type": "LinkedServiceReference",
+                          "parameters": {}
+                        }
+                      ],
+                      "datasets": []
+                    },
+                    "retentionTimeInDays": 1
+                  },
+                  "linkedServiceName": {
+                    "referenceName": "[variables('BatchServiceLSName')]",
+                    "type": "LinkedServiceReference"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "parameters": {
+          "db_connection_string": {
+            "type": "securestring"
+          },
+          "batch_size": {
+            "type": "int",
+            "defaultValue": 100
+          },
+          "source_directory": {
+            "type": "String"
+          },
+          "rejected_directory": {
+            "type": "String"
+          },
+          "file_glob": {
+            "type": "String"
+          },
+          "destination_table_name": {
+            "type": "String"
+          },
+          "processing_mode": {
+            "type": "String"
+          },
+          "data_source": {
+            "type": "String"
+          },
+          "etl": {
+            "type": "String"
+          },
+          "pre_copy_script": {
+            "type": "String",
+            "defaultValue": ""
+          },
+          "app_name": {
+            "type": "String"
+          },
+          "corr_id": {
+            "type": "String"
+          },
+          "turned_off": {
+            "type": "bool",
+            "defaultValue": false
+          }
+        },
+        "folder": {
+          "name": "[parameters('ApplicationDfDir')]"
+        },
+        "annotations": []
+      },
+      "dependsOn": [
+        "[variables('FactoryId')]",
+        "[concat(variables('FactoryId'), '/linkedServices/', variables('BatchServiceLSName'))]",
+        "[concat(variables('FactoryId'), '/linkedServices/', variables('BlobStorageLSName'))]",
+        "[concat(variables('FactoryId'), '/linkedServices/', variables('DataLakeStorageLSName'))]"
+      ]
+    }
+  ]
+}

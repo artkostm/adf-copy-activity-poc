@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "FactoryName": {
+      "value": "FactoryName"
+    },
+    "KeyVaultUrl": {
+      "value": "https://key.vault.azure.net"
+    },
+    "DataLakeStorageUrl": {
+      "value": "https://storage_acc.dfs.core.windows.net"
+    },
+    "StorageAccountName": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<subscribtion_id>/resourceGroups/<rg_name>/providers/Microsoft.KeyVault/vaults/<kv_name>"
+        },
+        "secretName": "storage-account-name"
+      }
+    },
+    "DataLakeStorageAccountKey": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<subscribtion_id>/resourceGroups/<rg_name>/providers/Microsoft.KeyVault/vaults/<kv_name>"
+        },
+        "secretName": "storage-account-key"
+      }
+    },
+    "StorageConnectionString": {
+      "value": "storage-connection-string"
+    },
+    "BatchAccount": {
+      "value": {
+        "BatchAccountName": "batch_acc",
+        "BatchUrl": "https://batch_acc.northeurope.batch.azure.com",
+        "BatchPoolName": "batch_pool_name",
+        "BatchAccountKey": {
+          "reference": {
+            "keyVault": {
+              "id": "/subscriptions/<subscribtion_id>/resourceGroups/<rg_name>/providers/Microsoft.KeyVault/vaults/<kv_name>"
+            },
+            "secretName": "batch-account-key"
+          }
+        }
+      }
+    },
+    "MonitoringDbJdbcConnectionStringSecure": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<subscribtion_id>/resourceGroups/<rg_name>/providers/Microsoft.KeyVault/vaults/<kv_name>"
+        },
+        "secretName": "dibdatalake-jdbc-connection-string"
+      }
+    }
+  }
+}
