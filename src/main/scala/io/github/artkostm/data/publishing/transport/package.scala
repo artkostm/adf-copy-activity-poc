@@ -1,5 +1,6 @@
 package io.github.artkostm.data.publishing
 
+import com.google.common.cache.{Cache, CacheBuilder}
 import io.github.artkostm.data.publishing.config.DatabaseTransportConfig
 import io.github.artkostm.data.publishing.db.Repository
 import io.github.artkostm.data.publishing.fs.Fs
@@ -23,8 +24,10 @@ package object transport {
     }
 
     def live: ZLayer[Fs with Repository with Has[DatabaseTransportConfig], Nothing, DatabaseTransport] =
-      ZLayer.fromServices[Fs.Service, Repository.Service, DatabaseTransportConfig, DatabaseTransport.Service] {
-        (fs, repo, config) => new DatabaseTransportImpl(fs, repo, config)
+      ZLayer.fromServicesM[Fs.Service, Repository.Service, DatabaseTransportConfig, Any, Nothing, DatabaseTransport.Service] {
+        (fs, repo, config) => Ref.make {
+          CacheBuilder.newBuilder().maximumSize(config.cacheSize).build().asInstanceOf[Cache[Fix[DataF], Boolean]]
+        }.map(cache => new DatabaseTransportImpl(fs, repo, config, cache))
       }
   }
 }

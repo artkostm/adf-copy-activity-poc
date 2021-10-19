@@ -1,5 +1,7 @@
 package io.github.artkostm.data.publishing.db
 
+
+import com.google.common.cache.Cache
 import _root_.doobie.implicits._
 import _root_.doobie.util.log._
 import _root_.doobie.{LogHandler, Transactor, _}
@@ -59,6 +61,11 @@ class DoobieRepository(transactor: Transactor[Task]) extends Repository.Service 
       },
       updatedRows => Task.succeed((chunk.size, Chunk.empty))
     )
+
+  override def deleteByKey(tableName: String, key: Fix[DataF]): Task[Int] =
+    Update[Fix[DataF]](prepareDeleteStatement(tableName, key))
+      .run(key)
+      .transact(transactor)
 }
 
 object DoobieRepository {

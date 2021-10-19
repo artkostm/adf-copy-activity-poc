@@ -45,6 +45,8 @@ package object db {
       def bulkInsert(tableName: String, data: Stream[Throwable, Fix[DataF]]): Task[Int]
 
       def executeScript(sqlScript: String): Task[Int]
+
+      def deleteByKey(tableName: String, key: Fix[DataF]): Task[Int]
     }
   }
 }
