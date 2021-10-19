@@ -48,6 +48,14 @@ object doobie {
       case _ => throw new RuntimeException("High level object should be of GStruct type.")
     }
 
+  def prepareDeleteStatement(tblName: String, key: Fix[DataF]): String =
+    Fix.un(key) match {
+      case GStruct(fields) =>
+        val keys = fields.keySet
+        s"""DELETE FROM $tblName WHERE ${keys.map(k => s"$k = ?").mkString(" AND ")}"""
+      case _ => throw new RuntimeException("High level object should be of GStruct type.")
+    }
+
   protected def put(ps: PreparedStatement, position: Int, data: Fix[DataF]): Unit =
     Fix.un(data) match {
       case GStruct(fields) =>
