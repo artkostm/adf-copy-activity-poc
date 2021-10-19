@@ -1,5 +1,6 @@
 package io.github.artkostm.data.publishing.transport
 
+import com.google.common.cache.Cache
 import io.github.artkostm.common.DataLakePathUtils
 import io.github.artkostm.data.publishing.config.{Full, WithFallback}
 import io.github.artkostm.data.publishing.config.DatabaseTransportConfig
@@ -14,12 +15,12 @@ import zio.blocking.Blocking
 import zio.stream.{Stream, Transducer, ZStream, ZTransducer}
 import zio.{Chunk, Exit, Task, ZIO}
 
-protected[transport] class DatabaseTransportImpl(fs: Fs.Service, repository: Repository.Service, config: DatabaseTransportConfig)
+protected[transport] class DatabaseTransportImpl(fs: Fs.Service, repository: Repository.Service, config: DatabaseTransportConfig, deletedKeys: Ref[Cache[Fix[DataF], Boolean]])
   extends DatabaseTransport.Service {
   import DatabaseTransportImpl._
 
   override def run(): Task[Unit] = {
-    config.preCopyScript.map { script =>
+    config.preCopyScript.filter(_.trim.nonEmpty).map { script =>
       logger.info(s"Executing pre-copy script: $script") *>
         repository.executeScript(script) >>=
         (n => logger.info(s"Rows affected: $n"))
@@ -75,7 +76,28 @@ protected[transport] class DatabaseTransportImpl(fs: Fs.Service, repository: Rep
     for {
       _           <- logger.info(s"Processing $file...")
       (schema, stream) <- fs.readAvro(file)
-      updatedStatOption <- stream
+      keyColumns = config.keyColumns.map(_.split(",").map(_.trim).filter(_.nonEmpty)).getOrElse(Array.empty)
+      updatedStatOption <-
+        (if (keyColumns.nonEmpty) {
+          val groupedByKey = stream
+            .groupByKey(data => DataF.struct(keyColumns.map(k => k -> data.getField(k)).toMap), buffer = config.db.batchSize) {
+              case (key, dataStream) =>
+                Stream.fromEffect(deletedKeys.get.flatMap { cache =>
+                  ZIO.when(!Option(cache.getIfPresent(key)).getOrElse(false)) {
+                    repository.deleteByKey(tableName, key).flatMap(c => logger.info(s"Deleted $c rows from $tableName [key=$key]"))
+                      .catchAll(t => logger.error(s"Error while deleting from $tableName using key $key", t)) *>
+                      deletedKeys.update { cache => cache.put(key, true); cache }
+                  }
+                }).flatMap(_ => dataStream)
+            }
+          config.statusColumn.filter(_.trim.nonEmpty).fold(groupedByKey) { statusColumn =>
+            groupedByKey.filter(data => data.get(statusColumn).contains("INSERT")) // todo: move to enum
+              .map {
+                case Fix(GStruct(fields)) => DataF.struct(fields - statusColumn)
+                case x => x
+              }
+          }
+        } else stream)
                             .chunkN(config.db.batchSize)
                             .mapChunksM[Blocking, Throwable, TransportStat] { chunk =>
                               repository
