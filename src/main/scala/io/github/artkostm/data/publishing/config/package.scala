@@ -30,7 +30,10 @@ package object config {
                                            fileGlob: Option[String],
                                            destinationTableName: String,
                                            monitoringConnectionKey: String,
-                                           preCopyScript: Option[String],
+                                           preCopyScript: Option[String] = None,
+                                           keyColumns: Option[String] = None, // comma-separated list of columns
+                                           statusColumn: Option[String] = None,
+                                           cacheSize: Int = 1000,
                                            mode: ProcessingMode = WithFallback,
                                            parallelization: Int = 1,
                                            appName: String = "DbTransportApp",
@@ -92,5 +95,6 @@ package object config {
 
   def configProvider: Layer[Nothing, ConfigProvider[DatabaseTransportConfig]] =
     ZLayer.succeed(new PureConfig[DatabaseTransportConfig])
+
 
 }
